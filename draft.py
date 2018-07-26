@@ -3,6 +3,7 @@
 convert panorama image into cube map
 
 dependencies:
+ - Pillow
  - numpy
  - imageio
  - FreeImage extension for hdr handing
@@ -102,6 +103,7 @@ def build_images(envmap, resolution):
     back_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     back_x, back_y, back_z = -0.5, -0.5, 0.5
 
+    # only used for debugging
     dw, dh = (envmap.shape[1] * 0.25, envmap.shape[0] * 0.25)
     dw, dh = int(dw), int(dh)
     debug_img = Image.new("RGB", (dw, dh))
@@ -124,12 +126,13 @@ def build_images(envmap, resolution):
             back_uv = normal_to_uv(normalize((back_x + u, back_y + v, back_z)))
             back_pixels[px, py] = sample(envmap, back_uv)
 
-            px_debug[int(top_uv[0] * dw), int(top_uv[1] * dh)] = (32, 128, 256)
-            px_debug[int(left_uv[0] * dw), int(left_uv[1] * dh)] = (128, 128, 128)
-            px_debug[int(right_uv[0] * dw), int(right_uv[1] * dh)] = (255, 255, 255)
-            px_debug[int(front_uv[0] * dw), int(front_uv[1] * dh)] = (96, 128, 56)
-            px_debug[int(bottom_uv[0] * dw), int(bottom_uv[1] * dh)] = (128, 256, 56)
-            px_debug[int(back_uv[0] * dw), int(back_uv[1] * dh)] = (225, 24, 111)
+            # draw debugging
+            px_debug[int(top_uv[0] * dw), int(top_uv[1] * dh)] = (32, int(255 * u), int(255 * v))
+            px_debug[int(left_uv[0] * dw), int(left_uv[1] * dh)] = (int(255 * u), int(255 * v), 128)
+            px_debug[int(right_uv[0] * dw), int(right_uv[1] * dh)] = (int(255 * u), 255, int(255 * v))
+            px_debug[int(front_uv[0] * dw), int(front_uv[1] * dh)] = (int(255 * u), 128, int(255 * v))
+            px_debug[int(bottom_uv[0] * dw), int(bottom_uv[1] * dh)] = (int(255 * v), int(255 * u), 56)
+            px_debug[int(back_uv[0] * dw), int(back_uv[1] * dh)] = (int(225 * v), int(111 * u), int(24 * u))
 
     debug_img.save("debug_image.png")
 
@@ -163,7 +166,7 @@ def main(target_path, resolution):
 
 if __name__ == "__main__":
     target_path = None
-    resolution = 512
+    resolution = 64
     if len(sys.argv) > 2:
         target_path = sys.argv[1]
     else:
