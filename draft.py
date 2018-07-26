@@ -23,11 +23,13 @@ import imageio
 import numpy as np
 
 
-def sample(pixels, uv):
+def sample(pixels, uv, resolution):
     size = pixels.shape
     ax, ay = uv[0] * size[0], uv[1] * size[1]
     x1, x2 = int(math.floor(ax)), int(math.ceil(ax))
     y1, y2 = int(math.floor(ay)), int(math.ceil(ay))
+    x2 = min(x2, resolution)
+    y2 = min(y2, resolution)
     a = pixels[x1, y1]
     b = pixels[x1, y2]
     c = pixels[x2, y1]
@@ -37,6 +39,7 @@ def sample(pixels, uv):
         (a[1] + b[1] + c[1] + d[1]) / 4,
         (a[2] + b[2] + c[2] + d[2]) / 4
     )
+
 
 def normalize(v):
     x, y, z = v
@@ -58,28 +61,30 @@ def normal_to_uv(normal)->tuple:
 
 
 def build_images(envmap, resolution):
-    top_pixels = np.zeros(shape=(*resolution, 3), dtype=np.float32)
+    top_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     top_x, top_y, top_z = -0.5, 0.5, -0.5
 
-    left_pixels = np.zeros(shape=(*resolution, 3), dtype=np.float32)
+    left_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     left_x, left_y, left_z = -0.5, -0.5, -0.5
 
-    right_pixels = np.zeros(shape=(*resolution, 3), dtype=np.float32)
+    right_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     right_x, right_y, right_z = 0.5, -0.5, -0.5
 
-    bottom_pixels = np.zeros(shape=(*resolution, 3), dtype=np.float32)
+    bottom_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     bottom_x, bottom_y, bottom_z = -0.5, -0.5, -0.5
 
-    front_pixels = np.zeros(shape=(*resolution, 3), dtype=np.float32)
+    front_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     front_x, front_y, front_z = -0.5, -0.5, -0.5
 
-    back_pixels = np.zeros(shape=(*resolution, 3), dtype=np.float32)
+    back_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     back_x, back_y, back_z = -0.5, -0.5, 0.5
     
-    for px in range(resolution[0]):
-        u = px / resolution[0]
-        for py in range(resolution[1]):
-            v = py / resolution[1]
+    minx = 0
+    maxx = 1
+    for px in range(resolution):
+        u = px / resolution
+        for py in range(resolution):
+            v = py / resolution
             top_uv = normal_to_uv(normalize((top_x + u, top_y, top_z + v)))
             left_uv = normal_to_uv(normalize((left_x, left_y + v, left_z + u)))
             right_uv = normal_to_uv(normalize((right_x, right_y + v, right_z - u)))
@@ -87,12 +92,18 @@ def build_images(envmap, resolution):
             front_uv = normal_to_uv(normalize((front_x + u, front_y + v, front_z)))
             back_uv = normal_to_uv(normalize((back_x + u, back_y + v, back_z)))
 
-            top_pixels[px, py] = sample(envmap, top_uv)
-            left_pixels[px, py] = sample(envmap, left_uv)
-            right_pixels[px, py] = sample(envmap, right_uv)
-            bottom_pixels[px, py] = sample(envmap, bottom_uv)
-            front_pixels[px, py] = sample(envmap, front_uv)
-            back_pixels[px, py] = sample(envmap, back_uv)
+            minx = min(top_uv[0], minx)
+            maxx = max(top_uv[0], maxx)
+
+            top_pixels[px, py] = sample(envmap, top_uv, resolution)
+            continue
+            left_pixels[px, py] = sample(envmap, left_uv, resolution)
+            right_pixels[px, py] = sample(envmap, right_uv, resolution)
+            bottom_pixels[px, py] = sample(envmap, bottom_uv, resolution)
+            front_pixels[px, py] = sample(envmap, front_uv, resolution)
+            back_pixels[px, py] = sample(envmap, back_uv, resolution)
+
+    print(minx, maxx)
 
     yield "top", top_pixels
     yield "left", left_pixels
@@ -102,7 +113,7 @@ def build_images(envmap, resolution):
     yield "back", back_pixels
 
 
-def main(target_path):
+def main(target_path, resolution):
     """ target path: path to HDRI filename """
 
     outdir = "out"
@@ -111,15 +122,19 @@ def main(target_path):
     os.makedirs(outdir)
 
     envmap = imageio.imread(target_path)
-    for dname, gen_img in build_images(envmap, (256, 256)):
+    for dname, gen_img in build_images(envmap, resolution):
         imageio.imwrite(f"{outdir}/{dname}.hdr", gen_img)
 
 
 if __name__ == "__main__":
     target_path = None
-    if len(sys.argv) != 2:
-        target_path = "test.hdr"
-    else:
+    resolution = 512
+    if len(sys.argv) > 2:
         target_path = sys.argv[1]
+    else:
+        target_path = "test.hdr"
 
-    main(target_path)
+    if len(sys.argv) > 3:
+        resolution = sys.argv[2]
+
+    main(target_path, resolution)
