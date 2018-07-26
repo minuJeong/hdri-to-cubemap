@@ -19,17 +19,25 @@ import sys
 import math
 from io import BytesIO
 
+from PIL import Image
 import imageio
 import numpy as np
 
 
-def sample(pixels, uv, resolution):
+def sample(pixels, uv):
+    """
+    samples pixel from uv.
+    captures 2 x 2 pixels, returns average
+
+    @param pixels: numpy array read from imageio
+    @param uv: target uv coordinate (2d)
+    """
     size = pixels.shape
     ax, ay = uv[0] * size[0], uv[1] * size[1]
     x1, x2 = int(math.floor(ax)), int(math.ceil(ax))
     y1, y2 = int(math.floor(ay)), int(math.ceil(ay))
-    x2 = min(x2, resolution)
-    y2 = min(y2, resolution)
+    x2 = min(x2, size[0] - 1)
+    y2 = min(y2, size[1] - 1)
     a = pixels[x1, y1]
     b = pixels[x1, y2]
     c = pixels[x2, y1]
@@ -42,15 +50,24 @@ def sample(pixels, uv, resolution):
 
 
 def normalize(v):
+    """
+    turn vector into unit vector
+
+    @param v: source vector
+    """
     x, y, z = v
     l = math.sqrt(x * x + y * y + z * z)
     return (x / l, y / l, z / l)
 
 
 def normal_to_uv(normal)->tuple:
-    """ right-handed system """
+    """
+    right-handed system
+
+    @param normal: iterable of normal vector
+    """
     phi = math.acos(-normal[1])
-    theta = math.atan2(normal[0], normal[2])
+    theta = math.atan2(-normal[0], normal[2])
     u = math.fmod(theta / (math.pi * 2.0), 1.0)
     v = math.fmod(phi / math.pi, 1.0)
     if u < 0:
@@ -61,6 +78,12 @@ def normal_to_uv(normal)->tuple:
 
 
 def build_images(envmap, resolution):
+    """
+    build cubemap faces
+
+    @param envmap: numpy array of pixel data read from imageio
+    @param resolution: sampling resolution
+    """
     top_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     top_x, top_y, top_z = -0.5, 0.5, -0.5
 
@@ -78,32 +101,37 @@ def build_images(envmap, resolution):
 
     back_pixels = np.zeros(shape=(resolution, resolution, 3), dtype=np.float32)
     back_x, back_y, back_z = -0.5, -0.5, 0.5
-    
-    minx = 0
-    maxx = 1
+
+    dw, dh = (envmap.shape[1] * 0.25, envmap.shape[0] * 0.25)
+    dw, dh = int(dw), int(dh)
+    debug_img = Image.new("RGB", (dw, dh))
+    px_debug = debug_img.load()
+
     for px in range(resolution):
         u = px / resolution
         for py in range(resolution):
             v = py / resolution
             top_uv = normal_to_uv(normalize((top_x + u, top_y, top_z + v)))
+            top_pixels[px, py] = sample(envmap, top_uv)
             left_uv = normal_to_uv(normalize((left_x, left_y + v, left_z + u)))
-            right_uv = normal_to_uv(normalize((right_x, right_y + v, right_z - u)))
-            bottom_uv = normal_to_uv(normalize((bottom_x + u, bottom_y, bottom_z + v)))
+            left_pixels[px, py] = sample(envmap, left_uv)
+            right_uv = normal_to_uv(normalize((right_x, right_y + v, right_z + u)))
+            right_pixels[px, py] = sample(envmap, right_uv)
             front_uv = normal_to_uv(normalize((front_x + u, front_y + v, front_z)))
+            front_pixels[px, py] = sample(envmap, front_uv)
+            bottom_uv = normal_to_uv(normalize((bottom_x + u, bottom_y, bottom_z + v)))
+            bottom_pixels[px, py] = sample(envmap, bottom_uv)
             back_uv = normal_to_uv(normalize((back_x + u, back_y + v, back_z)))
+            back_pixels[px, py] = sample(envmap, back_uv)
 
-            minx = min(top_uv[0], minx)
-            maxx = max(top_uv[0], maxx)
+            px_debug[int(top_uv[0] * dw), int(top_uv[1] * dh)] = (32, 128, 256)
+            px_debug[int(left_uv[0] * dw), int(left_uv[1] * dh)] = (128, 128, 128)
+            px_debug[int(right_uv[0] * dw), int(right_uv[1] * dh)] = (255, 255, 255)
+            px_debug[int(front_uv[0] * dw), int(front_uv[1] * dh)] = (96, 128, 56)
+            px_debug[int(bottom_uv[0] * dw), int(bottom_uv[1] * dh)] = (128, 256, 56)
+            px_debug[int(back_uv[0] * dw), int(back_uv[1] * dh)] = (225, 24, 111)
 
-            top_pixels[px, py] = sample(envmap, top_uv, resolution)
-            continue
-            left_pixels[px, py] = sample(envmap, left_uv, resolution)
-            right_pixels[px, py] = sample(envmap, right_uv, resolution)
-            bottom_pixels[px, py] = sample(envmap, bottom_uv, resolution)
-            front_pixels[px, py] = sample(envmap, front_uv, resolution)
-            back_pixels[px, py] = sample(envmap, back_uv, resolution)
-
-    print(minx, maxx)
+    debug_img.save("debug_image.png")
 
     yield "top", top_pixels
     yield "left", left_pixels
@@ -114,16 +142,23 @@ def build_images(envmap, resolution):
 
 
 def main(target_path, resolution):
-    """ target path: path to HDRI filename """
+    """
+    create output directory, trigger builder, write result files
+
+    @param target_path: path to HDRI filename
+    @param resolution: sample resolution that will pass to builder
+    """
 
     outdir = "out"
-    if os.path.isdir(outdir):
-        shutil.rmtree(outdir)
-    os.makedirs(outdir)
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir)
 
     envmap = imageio.imread(target_path)
     for dname, gen_img in build_images(envmap, resolution):
         imageio.imwrite(f"{outdir}/{dname}.hdr", gen_img)
+
+        # save preview images
+        imageio.imwrite(f"{outdir}/{dname}.png", np.multiply(gen_img, 1024).astype(np.uint8))
 
 
 if __name__ == "__main__":
