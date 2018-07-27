@@ -61,9 +61,28 @@ def normalize(v):
     return (x / l, y / l, z / l)
 
 
+def uv_to_normal(uv)->tuple:
+    """
+    [NOT USED. FOR PRACTICE]
+    uv to direction
+     - x: sin(phi) * sin(theta)
+       y: cos(phi)
+       z: -sin(phi) * cos(theta)
+
+    @param uv: iterable of uv
+    """
+    u, v = uv[0], uv[1]
+    x = math.sin(u) * math.sin(v)
+    y = math.cos(u)
+    z = - math.sin(u) * math.cos(v)
+    return normalize((x, y, z))
+
+
 def normal_to_uv(normal)->tuple:
     """
-    right-handed system
+    direction to spherical uv
+     - u: 1 + atan2(Dx, -Dz) / pi
+       v: acos(Dy) / pi
 
     @param normal: iterable of normal vector
     """
