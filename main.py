@@ -9,7 +9,7 @@ dependencies:
  - FreeImage extension for hdr handing
 
 python version
- - tested on 3.7
+ - tested on 3.7, 3.6
 
 author: minu jeong
 """
@@ -115,32 +115,55 @@ def build_images(envmap, resolution):
             v = py / resolution
             top_uv = normal_to_uv(normalize((top_x + u, top_y, top_z + v)))
             top_pixels[px, py] = sample(envmap, top_uv)
+            px_debug[int(top_uv[0] * dw), int(top_uv[1] * dh)] = (32, int(255 * u), int(255 * v))
+    yield "top", top_pixels
+
+    for px in range(resolution):
+        u = px / resolution
+        for py in range(resolution):
+            v = py / resolution
             left_uv = normal_to_uv(normalize((left_x, left_y + v, left_z + u)))
             left_pixels[px, py] = sample(envmap, left_uv)
+            px_debug[int(left_uv[0] * dw), int(left_uv[1] * dh)] = (int(255 * u), int(255 * v), 128)
+    yield "left", left_pixels
+
+    for px in range(resolution):
+        u = px / resolution
+        for py in range(resolution):
+            v = py / resolution
             right_uv = normal_to_uv(normalize((right_x, right_y + v, right_z + u)))
             right_pixels[px, py] = sample(envmap, right_uv)
-            front_uv = normal_to_uv(normalize((front_x + u, front_y + v, front_z)))
-            front_pixels[px, py] = sample(envmap, front_uv)
+            px_debug[int(right_uv[0] * dw), int(right_uv[1] * dh)] = (int(255 * u), 255, int(255 * v))
+    yield "right", right_pixels
+
+    for px in range(resolution):
+        u = px / resolution
+        for py in range(resolution):
+            v = py / resolution
             bottom_uv = normal_to_uv(normalize((bottom_x + u, bottom_y, bottom_z + v)))
             bottom_pixels[px, py] = sample(envmap, bottom_uv)
+            px_debug[int(bottom_uv[0] * dw), int(bottom_uv[1] * dh)] = (int(255 * v), int(255 * u), 56)
+    yield "bottom", bottom_pixels
+
+    for px in range(resolution):
+        u = px / resolution
+        for py in range(resolution):
+            v = py / resolution
+            front_uv = normal_to_uv(normalize((front_x + u, front_y + v, front_z)))
+            front_pixels[px, py] = sample(envmap, front_uv)
+            px_debug[int(front_uv[0] * dw), int(front_uv[1] * dh)] = (int(255 * u), 128, int(255 * v))
+    yield "front", front_pixels
+
+    for px in range(resolution):
+        u = px / resolution
+        for py in range(resolution):
+            v = py / resolution
             back_uv = normal_to_uv(normalize((back_x + u, back_y + v, back_z)))
             back_pixels[px, py] = sample(envmap, back_uv)
-
-            # draw debugging
-            px_debug[int(top_uv[0] * dw), int(top_uv[1] * dh)] = (32, int(255 * u), int(255 * v))
-            px_debug[int(left_uv[0] * dw), int(left_uv[1] * dh)] = (int(255 * u), int(255 * v), 128)
-            px_debug[int(right_uv[0] * dw), int(right_uv[1] * dh)] = (int(255 * u), 255, int(255 * v))
-            px_debug[int(front_uv[0] * dw), int(front_uv[1] * dh)] = (int(255 * u), 128, int(255 * v))
-            px_debug[int(bottom_uv[0] * dw), int(bottom_uv[1] * dh)] = (int(255 * v), int(255 * u), 56)
             px_debug[int(back_uv[0] * dw), int(back_uv[1] * dh)] = (int(225 * v), int(111 * u), int(24 * u))
 
+    # save debug image
     debug_img.save("debug_image.png")
-
-    yield "top", top_pixels
-    yield "left", left_pixels
-    yield "right", right_pixels
-    yield "bottom", bottom_pixels
-    yield "front", front_pixels
     yield "back", back_pixels
 
 
@@ -163,16 +186,19 @@ def main(target_path, resolution):
         # save preview images
         imageio.imwrite(f"{outdir}/{dname}.png", np.multiply(gen_img, 1024).astype(np.uint8))
 
+        print(f"generated: {dname}")
+
 
 if __name__ == "__main__":
     target_path = None
     resolution = 64
-    if len(sys.argv) > 2:
+    if len(sys.argv) > 1:
         target_path = sys.argv[1]
     else:
         target_path = "test.hdr"
 
-    if len(sys.argv) > 3:
-        resolution = sys.argv[2]
+    if len(sys.argv) > 2:
+        resolution = int(sys.argv[2])
 
+    print(f"running on {target_path} with resolution {resolution}")
     main(target_path, resolution)
